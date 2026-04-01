@@ -38,6 +38,7 @@ import (
 	"github.com/maximhq/bifrost/framework/vectorstore"
 	"github.com/maximhq/bifrost/plugins/compat"
 	"github.com/maximhq/bifrost/plugins/governance"
+	"github.com/maximhq/bifrost/plugins/governance/complexity"
 	"github.com/maximhq/bifrost/plugins/logging"
 	"github.com/maximhq/bifrost/plugins/maxim"
 	"github.com/maximhq/bifrost/plugins/otel"
@@ -127,9 +128,9 @@ type ConfigData struct {
 	// from config.json. Omitting this field or setting it to 2 uses v1.5.0+ semantics:
 	// empty = deny all, ["*"] = allow all. Setting it to 1 restores v1.4.x semantics:
 	// empty = allow all (equivalent to ["*"]).
-	Version           int                                   `json:"version,omitempty"`
-	Client            *configstore.ClientConfig             `json:"client"`
-	EncryptionKey     *schemas.EnvVar                       `json:"encryption_key"`
+	Version       int                       `json:"version,omitempty"`
+	Client        *configstore.ClientConfig `json:"client"`
+	EncryptionKey *schemas.EnvVar           `json:"encryption_key"`
 	// Deprecated: Use GovernanceConfig.AuthConfig instead
 	AuthConfig        *configstore.AuthConfig               `json:"auth_config,omitempty"`
 	Providers         map[string]configstore.ProviderConfig `json:"providers"`
@@ -1457,6 +1458,25 @@ func mergeGovernanceConfig(ctx context.Context, config *Config, configData *Conf
 			logger.Fatal("failed to sync governance config: %v", err)
 		}
 	}
+
+	// Merge complexity analyzer config — file config stays authoritative when present.
+	if configData.Governance.ComplexityAnalyzerConfig != nil {
+		normalized, err := complexity.ValidateAndNormalize(configData.Governance.ComplexityAnalyzerConfig)
+		if err != nil {
+			logger.Error("invalid complexity analyzer config in config file: %v — using defaults", err)
+		} else if normalized != nil {
+			current := config.GovernanceConfig.ComplexityAnalyzerConfig
+			config.GovernanceConfig.ComplexityAnalyzerConfig = normalized
+			if current == nil || !reflect.DeepEqual(current, normalized) {
+				if config.ConfigStore != nil {
+					if err := configstore.UpdateComplexityAnalyzerConfig(ctx, config.ConfigStore, normalized); err != nil {
+						logger.Warn("failed to sync complexity analyzer config from config file: %v", err)
+					}
+				}
+			}
+		}
+	}
+
 	// Sync pricing overrides into the model catalog in one batch to avoid
 	// rebuilding the lookup map on every iteration.
 	if config.ModelCatalog != nil {
@@ -1740,6 +1760,25 @@ func createGovernanceConfigInStore(ctx context.Context, config *Config) {
 
 			virtualKey.ProviderConfigs = providerConfigs
 			virtualKey.MCPConfigs = mcpConfigs
+		}
+
+		// Seed the complexity analyzer config from the config file.
+		if config.GovernanceConfig.ComplexityAnalyzerConfig != nil {
+			normalized, err := complexity.ValidateAndNormalize(config.GovernanceConfig.ComplexityAnalyzerConfig)
+			if err != nil {
+				return fmt.Errorf("invalid complexity analyzer config in config file: %w", err)
+			}
+			configJSON, err := json.Marshal(normalized)
+			if err != nil {
+				return fmt.Errorf("failed to marshal complexity analyzer config: %w", err)
+			}
+			if err := tx.Save(&configstoreTables.TableGovernanceConfig{
+				Key:   configstoreTables.ConfigComplexityAnalyzerConfigKey,
+				Value: string(configJSON),
+			}).Error; err != nil {
+				return fmt.Errorf("failed to save complexity analyzer config: %w", err)
+			}
+			config.GovernanceConfig.ComplexityAnalyzerConfig = normalized
 		}
 
 		// Create pricing overrides after virtual keys so that scoped overrides referencing

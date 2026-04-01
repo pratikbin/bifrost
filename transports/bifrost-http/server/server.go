@@ -24,6 +24,7 @@ import (
 	dynamicPlugins "github.com/maximhq/bifrost/framework/plugins"
 	"github.com/maximhq/bifrost/framework/tracing"
 	"github.com/maximhq/bifrost/plugins/governance"
+	"github.com/maximhq/bifrost/plugins/governance/complexity"
 	"github.com/maximhq/bifrost/plugins/logging"
 	"github.com/maximhq/bifrost/plugins/prompts"
 	"github.com/maximhq/bifrost/plugins/semanticcache"
@@ -87,6 +88,7 @@ type ServerCallbacks interface {
 	RemoveProvider(ctx context.Context, provider schemas.ModelProvider) error
 	ReloadRoutingRule(ctx context.Context, id string) error
 	RemoveRoutingRule(ctx context.Context, id string) error
+	ReloadComplexityAnalyzerConfig(ctx context.Context, config *complexity.AnalyzerConfig) error
 	// MCP related callbacks
 	AddMCPClient(ctx context.Context, clientConfig *schemas.MCPClientConfig) error
 	RemoveMCPClient(ctx context.Context, id string) error
@@ -688,6 +690,18 @@ func (s *BifrostHTTPServer) RemoveRoutingRule(ctx context.Context, id string) er
 	if err := store.DeleteRoutingRuleInMemory(ctx, id); err != nil {
 		return fmt.Errorf("failed to delete routing rule from store: %w", err)
 	}
+	return nil
+}
+
+// ReloadComplexityAnalyzerConfig swaps the governance plugin's complexity analyzer
+// with the provided full analyzer config.
+func (s *BifrostHTTPServer) ReloadComplexityAnalyzerConfig(ctx context.Context, config *complexity.AnalyzerConfig) error {
+	governancePlugin, err := s.getGovernancePlugin()
+	if err != nil {
+		return err
+	}
+
+	governancePlugin.ReloadComplexityAnalyzerConfig(config)
 	return nil
 }
 
