@@ -12,6 +12,14 @@ export interface RoutingTarget {
 	weight: number;
 }
 
+export interface ComplexityTarget {
+	provider?: string;
+	model?: string;
+	key_id?: string;
+}
+
+export type ComplexityTargets = Record<string, ComplexityTarget>;
+
 export interface RoutingRule {
 	id: string;
 	name: string;
@@ -25,6 +33,7 @@ export interface RoutingRule {
 	enabled: boolean;
 	chain_rule: boolean;
 	query?: RuleGroupType;
+	complexity_targets?: ComplexityTargets;
 	created_at: string;
 	updated_at: string;
 }
@@ -41,6 +50,7 @@ export interface CreateRoutingRuleRequest {
 	enabled?: boolean;
 	chain_rule?: boolean;
 	query?: RuleGroupType;
+	complexity_targets?: ComplexityTargets;
 }
 
 /** Partial update: only sent fields are applied; allows clearing fields by sending "" or []. */
@@ -71,6 +81,11 @@ export interface RoutingTargetFormData {
 	weight: number;
 }
 
+export interface ComplexityTargetFormData {
+	provider: string;
+	model: string;
+}
+
 export interface RoutingRuleFormData {
 	id?: string;
 	name: string;
@@ -84,8 +99,16 @@ export interface RoutingRuleFormData {
 	enabled: boolean;
 	chain_rule: boolean;
 	query?: RuleGroupType;
+	complexity_targets?: Record<string, ComplexityTargetFormData>;
 	isDirty?: boolean;
 }
+
+export const COMPLEXITY_TIER_VALUES = ["SIMPLE", "MEDIUM", "COMPLEX", "REASONING"] as const;
+
+export const DEFAULT_COMPLEXITY_TARGET: ComplexityTargetFormData = {
+	provider: "",
+	model: "",
+};
 
 export enum RoutingRuleScope {
 	Global = "global",
