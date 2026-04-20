@@ -28,6 +28,7 @@ var availableIntegrations = []string{
 	"bedrock",
 	"pydantic",
 	"cohere",
+	"ollama",
 }
 
 // newBifrostError wraps a standard error into a BifrostError with IsBifrostError set to false.
